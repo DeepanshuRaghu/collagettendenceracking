@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>📘 Smart Attendance Predictor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial; background: #f0f8ff; color: #222; padding: 20px; }
+    h1, h3 { text-align: center; }
+    .container { max-width:800px; margin:auto; background:#e3f2fd; padding:20px; border-radius:10px; }
+    label, select, input, textarea { display:block; width:100%; margin-top:10px; padding:8px; border-radius:5px; }
+    button { margin-top:15px; padding:12px; width:100%; background:#00796b; color:#fff; border:none; border-radius:5px; }
+    .day-box { border:1px solid #ccc; margin:10px 0; padding:10px; background:#fff; border-radius:6px; }
+    .day-box strong { display:block; margin-bottom:5px; }
+    .calendar-area { margin-top: 20px; }
+    canvas { max-width: 100%; margin-top: 20px; }
+    table { margin-top: 40px; width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ccc; padding: 8px; }
+    th { background: #00796b; color: white; }
+    td { background: #ffffff; text-align: center; }
+  </style>
+</head>
+<body>
+
+<h1>📘 Smart Attendance Predictor + Timetable-Based AI Planning</h1>
+<div class="container">
+  <form id="predictForm">
+    <label>Subject
+      <select name="subject" required>
+        <option value="">--Choose--</option>
+        <option>ADSA</option><option>APP</option><option>AI</option>
+        <option>DA</option><option>AM</option><option>IA</option>
+        <option>RIPR</option><option>RM</option>
+      </select>
+    </label>
+    <label>Attended
+      <input type="number" name="attended" min="0" required />
+    </label>
+    <label>Missed
+      <input type="number" name="missed" min="0" required />
+    </label>
+    <label>Target %
+      <input type="number" name="target" min="50" max="100" value="75" required />
+    </label>
+    <label>Notes
+      <textarea name="notes" placeholder="Optional notes"></textarea>
+    </label>
+    <button type="submit">📊 Predict Attendance</button>
+    <button type="button" onclick="generateFuture()">🔮 Plan Next 15 Days</button>
+  </form>
+
+  <div id="output"></div>
+  <div class="calendar-area" id="futureContainer"></div>
+  <canvas id="lineChart"></canvas>
+  <canvas id="barChart"></canvas>
+  <canvas id="pieChart"></canvas>
+</div>
+
+<!-- 📅 Holiday Table -->
+<h3 style="text-align:center; margin-top:40px;">📅 List of Gazetted Holidays (Chandigarh University)</h3>
+<div class="container">
+  <table>
+    <thead>
+      <tr>
+        <th>S.No.</th>
+        <th>Event</th>
+        <th>Date</th>
+        <th>Day</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>Republic Day</td><td>January 26</td><td>Sunday</td></tr>
+      <tr><td>2</td><td>Guru Ravidas Jayanti</td><td>February 12</td><td>Wednesday</td></tr>
+      <tr><td>3</td><td>Maha Shivratri</td><td>February 26</td><td>Wednesday</td></tr>
+      <tr><td>4</td><td>Holi</td><td>March 14</td><td>Friday</td></tr>
+      <tr><td>5</td><td>Eid-ul-Fitr</td><td>March 31</td><td>Monday</td></tr>
+      <tr><td>6</td><td>Dr. B.R. Ambedkar Jayanti</td><td>April 14</td><td>Monday</td></tr>
+      <tr><td>7</td><td>Independence Day</td><td>August 15</td><td>Friday</td></tr>
+      <tr><td>8</td><td>Gandhi Jayanti / Dussehra</td><td>October 2</td><td>Thursday</td></tr>
+      <tr><td>9</td><td>Maharishi Valmiki Jayanti</td><td>October 7</td><td>Tuesday</td></tr>
+      <tr><td>10</td><td>Diwali</td><td>October 20</td><td>Monday</td></tr>
+      <tr><td>11</td><td>Gurpurab, Birthday Shri Guru Nanak Dev Ji</td><td>November 5</td><td>Wednesday</td></tr>
+      <tr><td>12</td><td>Christmas Day</td><td>December 25</td><td>Thursday</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const timetable = {
+  "Monday":    [{ subject: "IA", time: "10:20-11:10" }, { subject: "APP", time: "11:20-12:10" }, { subject: "APP", time: "12:10-13:00" }, { subject: "APP", time: "13:55-14:45" }, { subject: "AM", time: "14:45-15:35" }, { subject: "RM", time: "15:35-16:25" }],
+  "Tuesday":   [{ subject: "ADSA", time: "9:30-10:20" }, { subject: "AI", time: "10:20-11:10" }, { subject: "S-1", time: "11:20-12:10" }, { subject: "RM", time: "12:10-13:00" }, { subject: "APP", time: "13:55-14:45" }, { subject: "DA", time: "14:45-15:35" }, { subject: "AM", time: "15:35-16:25" }],
+  "Wednesday": [{ subject: "APP", time: "9:30-10:20" }, { subject: "DA", time: "10:20-11:10" }, { subject: "AI", time: "11:20-12:10" }, { subject: "AI", time: "12:10-13:00" }, { subject: "ADSA", time: "13:55-14:45" }, { subject: "AI", time: "14:45-15:35" }],
+  "Thursday":  [{ subject: "DA", time: "9:30-10:20" }, { subject: "ADSA", time: "10:20-11:10" }, { subject: "RM", time: "11:20-12:10" }, { subject: "AM", time: "12:10-13:00" }, { subject: "RIPR", time: "13:55-14:45" }, { subject: "RIPR", time: "14:45-15:35" }, { subject: "IA", time: "15:35-16:25" }],
+  "Friday":    [{ subject: "ADSA", time: "9:30-10:20" }, { subject: "AI", time: "10:20-11:10" }, { subject: "ADSA", time: "11:20-12:10" }, { subject: "ADSA", time: "12:10-13:00" }, { subject: "AM", time: "13:55-14:45" }, { subject: "IA", time: "14:45-15:35" }]
+};
+
+const holidays = [
+  "2025-01-26", "2025-02-12", "2025-02-26", "2025-03-14",
+  "2025-03-31", "2025-04-14", "2025-08-15", "2025-10-02",
+  "2025-10-07", "2025-10-20", "2025-11-05", "2025-12-25"
+];
+
+const form = document.getElementById("predictForm");
+const output = document.getElementById("output");
+const futureContainer = document.getElementById("futureContainer");
+
+let chart1, chart2, chart3;
+
+form.addEventListener("submit", e => {
+  e.preventDefault();
+  const fd = new FormData(form);
+  const subject = fd.get("subject");
+  const attended = parseInt(fd.get("attended"));
+  const missed = parseInt(fd.get("missed"));
+  const target = parseFloat(fd.get("target"));
+  const notes = fd.get("notes");
+  const total = attended + missed;
+  if (!total) return alert("Please enter attendance data");
+
+  const percent = ((attended / total) * 100).toFixed(2);
+  const required = Math.ceil(((target / 100 * total) - attended) / (1 - target / 100));
+  const risk = percent < 75 ? "⚠️ Risk Alert: Below 75%" : "✅ Safe";
+
+  let suggestion = "";
+  if (percent > target) {
+    const maxSkips = Math.floor((attended / (target / 100)) - total);
+    if (maxSkips > 0) {
+      suggestion = `🤖 Suggestion: You can afford to skip ${maxSkips} class${maxSkips > 1 ? 'es' : ''} and still meet your ${target}% goal.`;
+    }
+  }
+
+  output.innerHTML = `
+    <h3>${subject} Attendance</h3>
+    <ul>
+      <li>Attended: ${attended}</li>
+      <li>Missed: ${missed}</li>
+      <li>Current: ${percent}%</li>
+      <li>Target: ${target}%</li>
+      <li>Need ${required} more in a row</li>
+      <li>Status: ${risk}</li>
+      <li>Notes: ${notes || 'None'}</li>
+    </ul>
+    <p style="color:green">${suggestion}</p>`;
+
+  drawCharts(attended, missed);
+});
+
+function generateFuture() {
+  const subject = document.querySelector("select[name='subject']").value;
+  if (!subject) return alert("Please select a subject");
+  futureContainer.innerHTML = "<h3>🗓️ Timetable-based Plan: Next 15 Days</h3>";
+
+  let today = new Date();
+  for (let i = 0; i < 15; i++) {
+    const d = new Date();
+    d.setDate(today.getDate() + i);
+    const isoDate = d.toISOString().split("T")[0];
+    const weekday = d.toLocaleDateString("en-US", { weekday: 'long' });
+    const fullDate = d.toDateString();
+    const isHoliday = holidays.includes(isoDate);
+
+    if (isHoliday) {
+      futureContainer.innerHTML += `<div class="day-box"><strong>${fullDate}</strong><p>🎉 Holiday</p></div>`;
+      continue;
+    }
+
+    const slots = timetable[weekday]?.filter(cls => cls.subject === subject) || [];
+    if (slots.length > 0) {
+      const div = document.createElement("div");
+      div.className = "day-box";
+      div.innerHTML = `<strong>${weekday}, ${fullDate}</strong>`;
+      slots.forEach((slot, idx) => {
+        div.innerHTML += `
+          <p>⏰ ${slot.time}</p>
+          <label><input type="radio" name="d${i}_${idx}" value="attend"> Attend</label>
+          <label><input type="radio" name="d${i}_${idx}" value="miss"> Miss</label>`;
+      });
+      futureContainer.appendChild(div);
+    }
+  }
+
+  const btn = document.createElement("button");
+  btn.textContent = "📈 Predict with Future Plan";
+  btn.onclick = () => predictWithFuture(subject);
+  futureContainer.appendChild(btn);
+}
+
+function predictWithFuture(subject) {
+  const attended = parseInt(document.querySelector("input[name='attended']").value);
+  const missed = parseInt(document.querySelector("input[name='missed']").value);
+  let futureAttended = 0, total = 0;
+
+  for (let i = 0; i < 15; i++) {
+    const d = new Date();
+    d.setDate(new Date().getDate() + i);
+    const iso = d.toISOString().split("T")[0];
+    if (holidays.includes(iso)) continue;
+    const weekday = d.toLocaleDateString("en-US", { weekday: 'long' });
+    const slots = timetable[weekday]?.filter(cls => cls.subject === subject) || [];
+
+    slots.forEach((_, j) => {
+      const input = document.querySelector(`input[name='d${i}_${j}']:checked`);
+      if (input) {
+        total++;
+        if (input.value === "attend") futureAttended++;
+      }
+    });
+  }
+
+  const finalTotal = attended + missed + total;
+  const percent = ((attended + futureAttended) / finalTotal * 100).toFixed(2);
+  output.innerHTML += `<h3>🔮 Predicted Final Attendance: ${percent}%</h3>`;
+  if (percent < 75) alert(`⚠️ Predicted Attendance: ${percent}%. Risk below 75%.`);
+  drawCharts(attended + futureAttended, missed + (total - futureAttended));
+}
+
+function drawCharts(attended, missed) {
+  chart1?.destroy(); chart2?.destroy(); chart3?.destroy();
+  chart1 = new Chart(document.getElementById("lineChart"), {
+    type: 'line',
+    data: {
+      labels: ["Start", "Now"],
+      datasets: [{
+        label: "Attendance %",
+        data: [0, Math.round(attended / (attended + missed) * 100)],
+        borderColor: "#00796b", fill: false
+      }]
+    }
+  });
+
+  chart2 = new Chart(document.getElementById("barChart"), {
+    type: 'bar',
+    data: {
+      labels: ["Attended", "Missed"],
+      datasets: [{
+        data: [attended, missed],
+        backgroundColor: ["#4caf50", "#f44336"]
+      }]
+    }
+  });
+
+  chart3 = new Chart(document.getElementById("pieChart"), {
+    type: 'pie',
+    data: {
+      labels: ["Attended", "Missed"],
+      datasets: [{
+        data: [attended, missed],
+        backgroundColor: ["#81c784", "#ef9a9a"]
+      }]
+    }
+  });
+}
+</script>
+
+</body>
+</html>
